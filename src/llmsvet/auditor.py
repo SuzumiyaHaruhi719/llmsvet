@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from llmsvet import __version__
-from llmsvet.llmstxt import check_local_llms_links, parse_llms_txt, render_llms_txt_fix
+from llmsvet.llmstxt import check_local_llms_links, check_sitemap_coverage, parse_llms_txt, render_llms_txt_fix
 from llmsvet.models import AuditReport, Finding, compute_grade
 from llmsvet.robots import evaluate_crawlers, render_robots_fix
 from llmsvet.schema import inspect_html_and_schema, render_schema_fix
@@ -73,6 +73,7 @@ def audit_target(
         html_text, x_robots_headers = _fetch_url_text(page_url, timeout=timeout)
         robots_text, _ = _fetch_url_text(f"{origin}/robots.txt", timeout=timeout)
         llms_text, _ = _fetch_url_text(f"{origin}/llms.txt", timeout=timeout)
+        sitemap_text, _ = _fetch_url_text(f"{origin}/sitemap.xml", timeout=timeout)
         llms_full_text, _ = _fetch_url_text(f"{origin}/llms-full.txt", timeout=timeout)
         has_full = bool(
             llms_full_text
@@ -89,6 +90,7 @@ def audit_target(
             html_text = _read_optional_file(site_root / "index.html")
         robots_text = _read_optional_file(site_root / "robots.txt")
         llms_text = _read_optional_file(site_root / "llms.txt")
+        sitemap_text = _read_optional_file(site_root / "sitemap.xml")
         has_full = (site_root / "llms-full.txt").is_file() or (site_root / "llms-full.md").is_file()
         if site_root.is_dir():
             discovered_pages = _discover_local_pages(site_root)
@@ -99,6 +101,9 @@ def audit_target(
         robots_text, combined_meta_robots, policy=policy
     )
     llms_score, llms_res, llms_findings = parse_llms_txt(llms_text, has_full=has_full)
+    if sitemap_text and llms_res.exists:
+        sitemap_base_url = base_url or str(html_meta.get("canonical_url") or "")
+        llms_findings.extend(check_sitemap_coverage(sitemap_text, llms_res.links, sitemap_base_url))
 
     if site_root is not None and llms_res.links:
         broken_findings = check_local_llms_links(site_root, llms_res.links)

@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llmsvet"
+version = "0.1.0"
+description = "Audit /llms.txt, JSON-LD Schema.org markup, and AI crawler access rules (training vs. search) from a zero-dependency CLI."
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+authors = [
+  {name = "SuzumiyaHaruhi719"}
+]
+keywords = ["llms-txt", "seo", "geo", "aeo", "robots-txt", "json-ld", "schema-org", "ai-crawlers", "cli"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Internet :: WWW/HTTP :: Indexing/Search",
+  "Topic :: Software Development :: Quality Assurance",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/SuzumiyaHaruhi719/llmsvet"
+Repository = "https://github.com/SuzumiyaHaruhi719/llmsvet"
+Issues = "https://github.com/SuzumiyaHaruhi719/llmsvet/issues"
+Changelog = "https://github.com/SuzumiyaHaruhi719/llmsvet/blob/main/CHANGELOG.md"
+
+[project.scripts]
+llmsvet = "llmsvet.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

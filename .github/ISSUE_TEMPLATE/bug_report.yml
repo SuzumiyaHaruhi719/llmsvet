@@ -1,0 +1,26 @@
+name: Bug Report
+description: Report an inaccurate audit finding, parser bug, or crash
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the unexpected score, rule finding, or error.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal Reproduction
+      description: Paste the minimal robots.txt, llms.txt, HTML snippet, or command used.
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: OS & Python Version
+      placeholder: "Ubuntu 24.04 / Python 3.12"
+    validations:
+      required: true

@@ -1,0 +1,19 @@
+name: Feature Request
+description: Propose a new AI crawler rule, schema check, or output format
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: What visibility gap or workflow pain would this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed CLI Behavior
+      description: Example command flags or rule IDs.
+    validations:
+      required: true

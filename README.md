@@ -4,7 +4,7 @@
 
 ### Audit `/llms.txt`, JSON-LD structured data, and AI crawler access rules from a single zero-dependency CLI.
 
-[![CI](https://img.shields.io/badge/CI-passing-22c55e?logo=githubactions&logoColor=white)](https://github.com/SuzumiyaHaruhi719/llmsvet/releases)
+[![CI](https://github.com/SuzumiyaHaruhi719/llmsvet/actions/workflows/ci.yml/badge.svg)](https://github.com/SuzumiyaHaruhi719/llmsvet/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/SuzumiyaHaruhi719/llmsvet?color=0ea5e9&logo=github)](https://github.com/SuzumiyaHaruhi719/llmsvet/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-f59e0b.svg)](LICENSE)
 [![Downloads](https://img.shields.io/github/downloads/SuzumiyaHaruhi719/llmsvet/total?color=8b5cf6&logo=python&logoColor=white)](https://github.com/SuzumiyaHaruhi719/llmsvet/releases)

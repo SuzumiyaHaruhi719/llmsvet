@@ -6,6 +6,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from llmsvet.auditor import audit_target
 from llmsvet.cli import main
@@ -91,6 +92,58 @@ class TestLlmsTxtValidator(unittest.TestCase):
             errs = check_local_llms_links(root, res.links)
             self.assertEqual(len(errs), 1)
             self.assertEqual(errs[0].rule_id, "LLM-013")
+
+
+class TestSitemapCoverage(unittest.TestCase):
+    llms = "# Example\n\n> Documentation for the example service.\n\n## Guides\n"
+
+    def sitemap(self, count):
+        entries = "".join(
+            f"<url><loc>https://example.com/section-{index}/overview</loc></url>"
+            for index in range(count)
+        )
+        return f'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{entries}</urlset>'
+
+    def test_local_coverage_threshold_is_strict_and_does_not_change_score(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "llms.txt").write_text(
+                self.llms + "- [Overview](/section-0/overview?version=2#start): A guide.\n",
+                encoding="utf-8",
+            )
+            baseline = audit_target(tmp)
+            sitemap = root / "sitemap.xml"
+            sitemap.write_text(self.sitemap(10), encoding="utf-8")
+            self.assertFalse(any(f.rule_id == "LLM-014" for f in audit_target(tmp).findings))
+            sitemap.write_text(self.sitemap(11), encoding="utf-8")
+            report = audit_target(tmp)
+            findings = [f for f in report.findings if f.rule_id == "LLM-014"]
+            self.assertEqual(len(findings), 1)
+            self.assertEqual(findings[0].severity, "info")
+            self.assertEqual(report.total_score, baseline.total_score)
+
+    def test_remote_links_from_other_hosts_do_not_count(self):
+        files = {
+            "/llms.txt": self.llms + "- [Other](https://other.example/section-0/overview): A guide.\n",
+            "/sitemap.xml": self.sitemap(1),
+        }
+
+        def fetch(url, timeout):
+            return files.get(url.removeprefix("https://example.com")), []
+
+        with patch("llmsvet.auditor._fetch_url_text", side_effect=fetch):
+            report = audit_target("https://example.com/start")
+        self.assertTrue(any(f.rule_id == "LLM-014" for f in report.findings))
+
+    def test_missing_malformed_or_index_sitemap_is_skipped(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "llms.txt").write_text(self.llms, encoding="utf-8")
+            for content in (None, "<urlset>", "<sitemapindex><loc>https://example.com/other.xml</loc></sitemapindex>"):
+                with self.subTest(content=content):
+                    if content is not None:
+                        (root / "sitemap.xml").write_text(content, encoding="utf-8")
+                    self.assertFalse(any(f.rule_id == "LLM-014" for f in audit_target(tmp).findings))
 
 
 class TestSchemaAndEndToEnd(unittest.TestCase):

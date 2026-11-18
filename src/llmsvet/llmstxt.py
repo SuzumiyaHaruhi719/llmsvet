@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import re
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urljoin, urlsplit
 
 from llmsvet.models import Finding
 
 LINK_LINE_RE = re.compile(r"^-\s+\[([^\]]+)\]\(([^)]+)\)(?:\s*:\s*(.*))?$")
+SITEMAP_NAMESPACE = "{http://www.sitemaps.org/schemas/sitemap/0.9}"
 
 
 @dataclass
@@ -291,6 +294,63 @@ def parse_llms_txt(content: Optional[str], has_full: bool = False) -> Tuple[int,
         )
 
     return min(35, max(0, score)), result, findings
+
+
+def parse_sitemap_urls(xml_text: str) -> List[str]:
+    """Read page locations from one sitemap without following sitemap indexes."""
+    if "<!DOCTYPE" in xml_text:
+        return []
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return []
+    namespace = SITEMAP_NAMESPACE if root.tag == f"{SITEMAP_NAMESPACE}urlset" else ""
+    if root.tag != f"{namespace}urlset":
+        return []
+    return [
+        node.text.strip()
+        for node in root.findall(f"{namespace}url/{namespace}loc")
+        if node.text and node.text.strip()
+    ]
+
+
+def check_sitemap_coverage(xml_text: str, links: List[LlmsLink], base_url: str) -> List[Finding]:
+    """Compare top-level path sections on the audited site, independent of scoring."""
+    def location(url: str) -> Tuple[str, str]:
+        try:
+            parsed = urlsplit(url)
+        except ValueError:
+            return "", ""
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            return "", ""
+        origin = f"{parsed.scheme}://{parsed.netloc.lower()}"
+        return origin, parsed.path.lstrip("/").split("/", 1)[0]
+
+    pages = [location(url) for url in parse_sitemap_urls(xml_text)]
+    origin = location(base_url)[0] or next((host for host, _ in pages if host), "")
+    sections = {section for host, section in pages if host == origin and section}
+    if not sections:
+        return []
+
+    covered = set()
+    for link in links:
+        try:
+            url = urljoin(f"{origin}/", link.url)
+        except ValueError:
+            continue
+        host, section = location(url)
+        if host == origin and section in sections:
+            covered.add(section)
+
+    if len(covered) * 10 >= len(sections):
+        return []
+    return [Finding(
+        rule_id="LLM-014",
+        severity="info",
+        category="llms_txt",
+        message=f"/llms.txt covers {len(covered)} of {len(sections)} top-level sitemap paths (less than 10%).",
+        remediation="Review sitemap.xml and add links to relevant documentation sections missing from /llms.txt.",
+    )]
 
 
 def check_local_llms_links(site_root: Path, links: List[LlmsLink]) -> List[Finding]:

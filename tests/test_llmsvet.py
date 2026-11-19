@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import tempfile
 import unittest
@@ -9,8 +11,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 from llmsvet.auditor import audit_target
-from llmsvet.cli import main
+from llmsvet.cli import format_sarif, main
 from llmsvet.llmstxt import check_local_llms_links, parse_llms_txt
+from llmsvet.models import AuditReport, Finding
 from llmsvet.robots import RobotsTxt, evaluate_crawlers
 from llmsvet.schema import inspect_html_and_schema
 
@@ -209,6 +212,79 @@ class TestSchemaAndEndToEnd(unittest.TestCase):
             self.assertEqual(rc_fail, 2)
             rc_pass = main(["audit", str(site), "--format", "markdown", "--fail-under", "1"])
             self.assertEqual(rc_pass, 0)
+
+
+class TestSarifOutput(unittest.TestCase):
+    def _report(self) -> AuditReport:
+        return AuditReport(
+            target="./dist",
+            mode="local",
+            policy="search-only",
+            total_score=50,
+            grade="D",
+            crawler_score=10,
+            crawler_max=35,
+            llms_score=20,
+            llms_max=35,
+            schema_score=20,
+            schema_max=30,
+            findings=[
+                Finding("ROB-003", "error", "crawlers", "Search bots blocked.", "Allow OAI-SearchBot."),
+                Finding("LLM-002", "warning", "llms_txt", "No summary blockquote.", "Add a > summary."),
+                Finding("SCH-004", "info", "schema", "Consider FAQPage."),
+                Finding("LLM-001", "pass", "llms_txt", "llms.txt found."),
+                Finding("ROB-003", "error", "crawlers", "Search bots blocked (again).", "Allow OAI-SearchBot."),
+            ],
+        )
+
+    def test_sarif_structure_and_levels(self) -> None:
+        doc = json.loads(format_sarif(self._report()))
+        self.assertEqual(doc["version"], "2.1.0")
+        self.assertIn("sarif-2.1.0", doc["$schema"])
+        self.assertEqual(len(doc["runs"]), 1)
+        run = doc["runs"][0]
+        driver = run["tool"]["driver"]
+        self.assertEqual(driver["name"], "llmsvet")
+        self.assertTrue(driver["version"])
+
+        # pass findings are skipped; rules are de-duplicated by rule id
+        rule_ids = [r["id"] for r in driver["rules"]]
+        self.assertEqual(rule_ids, ["ROB-003", "LLM-002", "SCH-004"])
+        self.assertEqual([r["ruleId"] for r in run["results"]], ["ROB-003", "LLM-002", "SCH-004", "ROB-003"])
+        self.assertEqual([r["level"] for r in run["results"]], ["error", "warning", "note", "error"])
+
+        for result in run["results"]:
+            self.assertEqual(driver["rules"][result["ruleIndex"]]["id"], result["ruleId"])
+            self.assertTrue(result["message"]["text"])
+            loc = result["locations"][0]["physicalLocation"]
+            self.assertEqual(loc["artifactLocation"]["uri"], "dist")
+            self.assertGreaterEqual(loc["region"]["startLine"], 1)
+        self.assertIn("Allow OAI-SearchBot.", run["results"][0]["message"]["text"])
+        self.assertEqual(driver["rules"][0]["help"]["text"], "Allow OAI-SearchBot.")
+        self.assertEqual(driver["rules"][0]["defaultConfiguration"]["level"], "error")
+
+    def test_sarif_with_only_passing_findings_has_empty_results(self) -> None:
+        report = self._report()
+        report.findings = [Finding("LLM-001", "pass", "llms_txt", "ok")]
+        doc = json.loads(format_sarif(report))
+        self.assertEqual(doc["runs"][0]["results"], [])
+        self.assertEqual(doc["runs"][0]["tool"]["driver"]["rules"], [])
+
+    def test_cli_sarif_format(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            site = Path(tmp)
+            (site / "index.html").write_text("<html><head><title>X</title></head><body></body></html>", encoding="utf-8")
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = main(["audit", str(site), "--format", "sarif", "--fail-under", "1"])
+            self.assertEqual(rc, 0)
+            doc = json.loads(buf.getvalue())
+            self.assertEqual(doc["version"], "2.1.0")
+            run = doc["runs"][0]
+            self.assertTrue(run["results"])
+            rule_ids = {r["id"] for r in run["tool"]["driver"]["rules"]}
+            self.assertTrue(all(r["ruleId"] in rule_ids for r in run["results"]))
+            self.assertTrue(all(r["level"] in ("error", "warning", "note") for r in run["results"]))
 
 
 if __name__ == "__main__":

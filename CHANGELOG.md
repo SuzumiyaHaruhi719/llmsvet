@@ -3,6 +3,11 @@
 All notable changes to this project are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- `llmsvet audit --format sarif` emits SARIF 2.1.0 (`tool.driver.rules` and `results`) for GitHub Code Scanning.
+
 ## [0.1.0] - 2026-11-18
 
 ### Added

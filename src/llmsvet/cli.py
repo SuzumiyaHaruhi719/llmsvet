@@ -7,7 +7,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from llmsvet import __version__
 from llmsvet.auditor import audit_target
@@ -136,6 +136,94 @@ def format_markdown(report: AuditReport) -> str:
     return "\n".join(lines) + "\n"
 
 
+_SARIF_SCHEMA = "https://json.schemastore.org/sarif-2.1.0.json"
+_SARIF_INFORMATION_URI = "https://github.com/SuzumiyaHaruhi719/llmsvet"
+_SARIF_LEVELS = {"error": "error", "warning": "warning", "info": "note"}
+_SARIF_LEVEL_RANK = {"note": 0, "warning": 1, "error": 2}
+
+
+def _sarif_artifact_uri(target: str) -> str:
+    """Artifact URI for a finding: remote URLs as-is, local paths as relative POSIX paths."""
+    if "://" in target:
+        return target
+    uri = target.replace("\\", "/")
+    while uri.startswith("./"):
+        uri = uri[2:]
+    return uri or "."
+
+
+def format_sarif(report: AuditReport) -> str:
+    """Serialize report findings as SARIF 2.1.0 (``pass`` findings are skipped)."""
+    rules: List[Dict[str, Any]] = []
+    rule_index: Dict[str, int] = {}
+    results: List[Dict[str, Any]] = []
+    uri = _sarif_artifact_uri(report.target)
+
+    for f in report.findings:
+        if f.severity == "pass":
+            continue
+        level = _SARIF_LEVELS.get(f.severity, "note")
+
+        if f.rule_id not in rule_index:
+            rule: Dict[str, Any] = {
+                "id": f.rule_id,
+                "name": f.rule_id,
+                "shortDescription": {"text": f.message},
+                "defaultConfiguration": {"level": level},
+                "properties": {"category": f.category},
+            }
+            if f.remediation:
+                rule["help"] = {"text": f.remediation}
+            rule_index[f.rule_id] = len(rules)
+            rules.append(rule)
+        else:
+            rule = rules[rule_index[f.rule_id]]
+            current = rule["defaultConfiguration"]["level"]
+            if _SARIF_LEVEL_RANK[level] > _SARIF_LEVEL_RANK[current]:
+                rule["defaultConfiguration"]["level"] = level
+            if f.remediation and "help" not in rule:
+                rule["help"] = {"text": f.remediation}
+
+        text = f.message
+        if f.remediation:
+            text = f"{text} Fix: {f.remediation}"
+        results.append(
+            {
+                "ruleId": f.rule_id,
+                "ruleIndex": rule_index[f.rule_id],
+                "level": level,
+                "message": {"text": text},
+                "locations": [
+                    {
+                        "physicalLocation": {
+                            "artifactLocation": {"uri": uri},
+                            "region": {"startLine": 1},
+                        }
+                    }
+                ],
+            }
+        )
+
+    sarif = {
+        "$schema": _SARIF_SCHEMA,
+        "version": "2.1.0",
+        "runs": [
+            {
+                "tool": {
+                    "driver": {
+                        "name": "llmsvet",
+                        "version": __version__,
+                        "informationUri": _SARIF_INFORMATION_URI,
+                        "rules": rules,
+                    }
+                },
+                "results": results,
+            }
+        ],
+    }
+    return json.dumps(sarif, indent=2, ensure_ascii=False)
+
+
 def _format_bot_matrix(bots: List[BotStatus], use_color: bool = True) -> str:
     st = _Style(use_color)
     lines = [
@@ -168,7 +256,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_audit.add_argument(
         "--format",
-        choices=["table", "json", "markdown"],
+        choices=["table", "json", "markdown", "sarif"],
         default="table",
         help="Output report format (default: table)",
     )
@@ -230,6 +318,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(json.dumps(report.to_dict(), indent=2, ensure_ascii=False))
         elif args.format == "markdown":
             print(format_markdown(report), end="")
+        elif args.format == "sarif":
+            print(format_sarif(report))
         else:
             print(format_table(report, use_color=use_color))
 

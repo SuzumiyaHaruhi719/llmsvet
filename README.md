@@ -27,7 +27,7 @@ Teams block `GPTBot` or `User-agent: *` in `robots.txt` to opt out of model trai
 - **`/llms.txt` & `/llms-full.txt` Conformance**: Verifies the required H1 title, summary blockquote, H2 link sections, Markdown link syntax, `Optional` section behavior, token footprint estimate, and local/remote link targets.
 - **JSON-LD & HTML Metadata Inspection**: Parses `<script type="application/ld+json">` (including `@graph` arrays), checks high-citation Schema.org types (`SoftwareApplication`, `TechArticle`, `Article`, `FAQPage`, `Organization`, `WebSite`, `BreadcrumbList`), and inspects `<title>`, canonical URLs, meta descriptions, and `X-Robots-Tag` / `<meta name="robots">` (`noai`, `noindex`).
 - **Ready-to-Deploy Fix Generator (`--emit-fixes`)**: Generates a valid `llms.txt` starter, a split-policy `robots.txt` block (allow search citations, block training, or allow all), and missing JSON-LD `<script>` snippets derived from your actual HTML metadata.
-- **CI Gate Ready**: Runs offline against `./dist` or `./public` before deployment with `--fail-under <score>` and `--format table|json|markdown`.
+- **CI Gate Ready**: Runs offline against `./dist` or `./public` before deployment with `--fail-under <score>` and `--format table|json|markdown|sarif`.
 - **Zero Runtime Dependencies**: Pure Python 3.9+ standard library. Works identically on Linux, macOS, and Windows without API keys or headless browsers.
 
 ## Quickstart
@@ -70,6 +70,14 @@ llmsvet audit ./public --policy search-only
 llmsvet audit https://example.com --format json > report.json
 llmsvet audit ./dist --format markdown > pr-comment.md
 ```
+
+### Export SARIF for GitHub Code Scanning
+
+```bash
+llmsvet audit ./dist --format sarif > llmsvet.sarif
+```
+
+Upload the file with `github/codeql-action/upload-sarif`. Severities map `error` -> `error`, `warning` -> `warning`, `info` -> `note`; passing checks are not reported.
 
 ### Validate a standalone `llms.txt` file
 
@@ -118,7 +126,7 @@ Yes. `llmsvet` uses `pathlib` and pure Python standard library modules, with ANS
 
 - [x] v0.1.0: Local directory + live URL auditing, 18 AI crawler matrix, RFC 9309 wildcard matching, `/llms.txt` validator, JSON-LD `@graph` parser, `--emit-fixes`, Table/JSON/Markdown reporters.
 - [ ] v0.2.0: Sitemap (`sitemap.xml`) cross-check to detect high-priority docs missing from `/llms.txt` (see open issues).
-- [ ] v0.2.0: SARIF 2.1.0 output format for native GitHub Code Scanning annotations.
+- [x] v0.2.0: SARIF 2.1.0 output format for native GitHub Code Scanning annotations.
 - [ ] v0.3.0: Recursive multi-page HTML crawl for local static site builds.
 
 ## Contributing
